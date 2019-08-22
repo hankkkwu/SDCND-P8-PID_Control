@@ -8,6 +8,7 @@
 // for convenience
 using nlohmann::json;
 using std::string;
+using std::vector;
 
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
@@ -37,9 +38,22 @@ int main() {
   /**
    * TODO: Initialize the pid variable.
    */
+  pid.Init(0.04, 0.00015, 0.3);
+  vector<double> p{0.1, 0.0001, 1.0};
+  vector<double> dp{0.01, 0.0001, 0.1};
+  int i = 0;
+  bool flag_1 = true;    // if flag_1 = true, p[i] += dp[i]
+  bool flag_2 = false;   // if flag_2 = true, p[i] -= dp[i]
+  bool flag_3 = false;   // if flag_3 = true, means p[i] += dp[i], but error > best_error, so need to set flag_2 = true
+  bool twiddle = false;  // twiddle is only false at the beginning or the sumdp < 0.0001
+  bool begin = false;     // begin is only true at the beginning
+  double total_error = 0.0;
+  double best_error;
+  int count = 0;   // count how many moves
+  int n = 500;     // every iteration will run 500 times
 
-  h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, 
-                     uWS::OpCode opCode) {
+  h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n]
+             (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
@@ -58,22 +72,134 @@ int main() {
           double angle = std::stod(j[1]["steering_angle"].get<string>());
           double steer_value;
           /**
-           * TODO: Calculate steering value here, remember the steering value is
-           *   [-1, 1].
+           * TODO: Calculate steering value here, remember the steering value is [-1, 1].
            * NOTE: Feel free to play around with the throttle and speed.
-           *   Maybe use another PID controller to control the speed!
+           *       Maybe use another PID controller to control the speed!
            */
-          
+
+          if (begin && count < n){
+            // calculate the initial error, and set it as best error
+            total_error += cte * cte;
+            count += 1;
+            if (count == n){
+              best_error = total_error / n;
+              total_error = 0;
+              begin = false;
+            }
+          }
+          else if (!begin && !twiddle){
+            count = 0;
+            //twiddle = true;
+          }
+
+          if (twiddle){
+            if (count == n){
+              count = 0;
+            }
+            if (flag_1){
+              p[i] += dp[i];
+              std::cout<< "first p[i] = " << p[i] << " i = " << i << std::endl;
+              if (i == 0){
+                pid.Kp = p[i];
+              }
+              else if (i ==1){
+                pid.Ki = p[i];
+              }
+              else if (i == 2){
+                pid.Kd = p[i];
+              }
+              flag_1 = false;
+              flag_3 = true;
+            }
+            else if (flag_2){
+              p[i] -= 2 * dp[i];
+              std::cout << "second p[i] = " << p[i] << " i = " << i << std::endl;
+              if (i == 0){
+                pid.Kp = p[i];
+              }
+              else if (i ==1){
+                pid.Ki = p[i];
+              }
+              else if (i == 2){
+                pid.Kd = p[i];
+              }
+              flag_2 = false;
+            }
+            if (count < n){
+              total_error += cte * cte;
+              count += 1;
+              if (count == n){
+                double error = total_error / n;
+                total_error = 0;
+                if (error < best_error){
+                  best_error = error;
+                  dp[i] *= 1.1;
+                  flag_1 = true;
+                  std::cout << "best p[i] = " << p[i] << " i = " << i << std::endl;
+                  if (i < 2){
+                    i += 1;
+                  }
+                  else{
+                    i = 0;
+                  }
+                }
+                else if (error > best_error && flag_3){
+                  flag_2 = true;
+                  flag_3 = false;
+                }
+                else{
+                  p[i] += dp[i];
+                  if (i == 0){
+                    pid.Kp = p[i];
+                  }
+                  else if (i ==1){
+                    pid.Ki = p[i];
+                  }
+                  else if (i == 2){
+                    pid.Kd = p[i];
+                  }
+                  dp[i] *= 0.9;
+                  flag_1 = true;
+                  std::cout << "current p[i] = " << p[i] << " i = " << i << " dp[i] = " << dp[i] <<std::endl;
+                  if (i < 2){
+                    i += 1;
+                  }
+                  else{
+                    i = 0;
+                  }
+                }
+              }
+            }
+          }
+
+          double sumdp = dp[0] + dp[1] + dp[2];
+          if (sumdp < 0.001){
+            twiddle = false;
+            std::cout << "best parameter: " << p[0] << "," << p[1] << "," << p[2] << std::endl;
+          }
+
+          pid.UpdateError(cte);
+          steer_value = pid.TotalError();
+          if (count == 1){
+            std::cout << "parameter: " << pid.Kp << "," << pid.Ki << "," << pid.Kd << std::endl;
+          }
+
           // DEBUG
-          std::cout << "CTE: " << cte << " Steering Value: " << steer_value 
-                    << std::endl;
+          //std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = 0.3;
-          auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
-          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          if (count == n){
+            string msg = "42[\"reset\",{}]";
+            std::cout << msg << std::endl;
+            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          }
+          else{
+            auto msg = "42[\"steer\"," + msgJson.dump() + "]";
+            //std::cout << msg << std::endl;
+            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
+          }
         }  // end "telemetry" if
       } else {
         // Manual driving
@@ -87,7 +213,7 @@ int main() {
     std::cout << "Connected!!!" << std::endl;
   });
 
-  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code, 
+  h.onDisconnection([&h](uWS::WebSocket<uWS::SERVER> ws, int code,
                          char *message, size_t length) {
     ws.close();
     std::cout << "Disconnected" << std::endl;
@@ -100,6 +226,6 @@ int main() {
     std::cerr << "Failed to listen to port" << std::endl;
     return -1;
   }
-  
+
   h.run();
 }
