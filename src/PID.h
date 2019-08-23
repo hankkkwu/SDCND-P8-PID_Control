@@ -38,14 +38,12 @@ class PID {
   double Ki;
   double Kd;
 
- private:
   /**
    * PID Errors
    */
   double p_error;
   double i_error;
   double d_error;
-
 };
 
 #endif  // PID_H
