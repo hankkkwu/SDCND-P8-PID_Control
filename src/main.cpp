@@ -38,19 +38,19 @@ int main() {
   /**
    * TODO: Initialize the pid variable.
    */
-  pid.Init(0.04, 0.00015, 0.3);
-  vector<double> p{0.1, 0.0001, 1.0};
+  pid.Init(0.04, 0.00045, 0.5);
+  vector<double> p{0.04, 0.00045, 1.0};
   vector<double> dp{0.01, 0.0001, 0.1};
   int i = 0;
   bool flag_1 = true;    // if flag_1 = true, p[i] += dp[i]
   bool flag_2 = false;   // if flag_2 = true, p[i] -= dp[i]
   bool flag_3 = false;   // if flag_3 = true, means p[i] += dp[i], but error > best_error, so need to set flag_2 = true
   bool twiddle = false;  // twiddle is only false at the beginning or the sumdp < 0.0001
-  bool begin = false;     // begin is only true at the beginning
+  bool begin = true;     // begin is only true at the beginning
   double total_error = 0.0;
   double best_error;
   int count = 0;   // count how many moves
-  int n = 500;     // every iteration will run 500 times
+  int n = 700;     // every iteration will run 500 times
 
   h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n]
              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
@@ -89,7 +89,7 @@ int main() {
           }
           else if (!begin && !twiddle){
             count = 0;
-            //twiddle = true;
+            twiddle = true;
           }
 
           if (twiddle){
@@ -98,6 +98,9 @@ int main() {
             }
             if (flag_1){
               p[i] += dp[i];
+              pid.p_error = 0.0;
+              pid.i_error = 0.0;
+              pid.d_error = 0.0;
               std::cout<< "first p[i] = " << p[i] << " i = " << i << std::endl;
               if (i == 0){
                 pid.Kp = p[i];
@@ -113,6 +116,9 @@ int main() {
             }
             else if (flag_2){
               p[i] -= 2 * dp[i];
+              pid.p_error = 0.0;
+              pid.i_error = 0.0;
+              pid.d_error = 0.0;
               std::cout << "second p[i] = " << p[i] << " i = " << i << std::endl;
               if (i == 0){
                 pid.Kp = p[i];
@@ -130,7 +136,7 @@ int main() {
               count += 1;
               if (count == n){
                 double error = total_error / n;
-                total_error = 0;
+                total_error = 0.0;
                 if (error < best_error){
                   best_error = error;
                   dp[i] *= 1.1;
@@ -182,6 +188,7 @@ int main() {
           steer_value = pid.TotalError();
           if (count == 1){
             std::cout << "parameter: " << pid.Kp << "," << pid.Ki << "," << pid.Kd << std::endl;
+            std::cout << "errors: " << cte << "," << pid.p_error << "," << pid.i_error << "," << pid.d_error << std::endl;
           }
 
           // DEBUG
