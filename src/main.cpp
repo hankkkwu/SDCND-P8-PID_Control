@@ -38,8 +38,8 @@ int main() {
   /**
    * TODO: Initialize the pid variable.
    */
-  pid.Init(0.04, 0.00045, 0.5);
-  vector<double> p{0.04, 0.00045, 1.0};
+  pid.Init(0.04, 0.00045, 0.6);
+  vector<double> p{0.06, 0.00031, 1.29};
   vector<double> dp{0.01, 0.0001, 0.1};
   int i = 0;
   bool flag_1 = true;    // if flag_1 = true, p[i] += dp[i]
@@ -50,7 +50,7 @@ int main() {
   double total_error = 0.0;
   double best_error;
   int count = 0;   // count how many moves
-  int n = 700;     // every iteration will run 500 times
+  int n = 500;     // every iteration will run 500 times
 
   h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n]
              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
@@ -88,20 +88,18 @@ int main() {
             }
           }
           else if (!begin && !twiddle){
-            count = 0;
+            //count = 0;
             twiddle = true;
           }
 
           if (twiddle){
-            if (count == n){
-              count = 0;
-            }
-            if (flag_1){
+            if (flag_1 && count == 0){
               p[i] += dp[i];
               pid.p_error = 0.0;
               pid.i_error = 0.0;
               pid.d_error = 0.0;
               std::cout<< "first p[i] = " << p[i] << " i = " << i << std::endl;
+              std::cout << "errors: " << cte << "," << pid.p_error << "," << pid.i_error << "," << pid.d_error << std::endl;
               if (i == 0){
                 pid.Kp = p[i];
               }
@@ -114,12 +112,13 @@ int main() {
               flag_1 = false;
               flag_3 = true;
             }
-            else if (flag_2){
+            else if (flag_2 && count == 0){
               p[i] -= 2 * dp[i];
               pid.p_error = 0.0;
               pid.i_error = 0.0;
               pid.d_error = 0.0;
               std::cout << "second p[i] = " << p[i] << " i = " << i << std::endl;
+              std::cout << "errors: " << cte << "," << pid.p_error << "," << pid.i_error << "," << pid.d_error << std::endl;
               if (i == 0){
                 pid.Kp = p[i];
               }
@@ -176,6 +175,9 @@ int main() {
                 }
               }
             }
+            else if (count == n){
+              count = 0;
+            }
           }
 
           double sumdp = dp[0] + dp[1] + dp[2];
@@ -192,7 +194,7 @@ int main() {
           }
 
           // DEBUG
-          //std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << std::endl;
+          std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << "count:" << count << std::endl;
 
           json msgJson;
           msgJson["steering_angle"] = steer_value;
