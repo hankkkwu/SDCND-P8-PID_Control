@@ -35,24 +35,26 @@ int main() {
   uWS::Hub h;
 
   PID pid;
+  PID throttle;
   /**
    * TODO: Initialize the pid variable.
    */
-  pid.Init(0.04, 0.00045, 0.6);
-  vector<double> p{0.06, 0.00031, 1.29};
+  pid.Init(0.1, 0.00032, 0.49);
+  vector<double> p{0.1, 0.00053, 0.7};
   vector<double> dp{0.01, 0.0001, 0.1};
+  throttle.Init(-1.0, -0.01, 0.0);
   int i = 0;
   bool flag_1 = true;    // if flag_1 = true, p[i] += dp[i]
   bool flag_2 = false;   // if flag_2 = true, p[i] -= dp[i]
   bool flag_3 = false;   // if flag_3 = true, means p[i] += dp[i], but error > best_error, so need to set flag_2 = true
   bool twiddle = false;  // twiddle is only false at the beginning or the sumdp < 0.0001
-  bool begin = true;     // begin is only true at the beginning
+  bool begin = false;     // begin is only true at the beginning
   double total_error = 0.0;
   double best_error;
   int count = 0;   // count how many moves
-  int n = 500;     // every iteration will run 500 times
+  int n = 1000;     // every iteration will run 500 times
 
-  h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n]
+  h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n, &throttle]
              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -71,6 +73,8 @@ int main() {
           double speed = std::stod(j[1]["speed"].get<string>());
           double angle = std::stod(j[1]["steering_angle"].get<string>());
           double steer_value;
+          double throttle_value;
+          double tol = 0.01;
           /**
            * TODO: Calculate steering value here, remember the steering value is [-1, 1].
            * NOTE: Feel free to play around with the throttle and speed.
@@ -79,19 +83,21 @@ int main() {
 
           if (begin && count < n){
             // calculate the initial error, and set it as best error
-            total_error += cte * cte;
+            if (count > 50){
+              total_error += cte * cte;
+            }
             count += 1;
             if (count == n){
-              best_error = total_error / n;
+              best_error = total_error / (n-50);
               total_error = 0;
               begin = false;
             }
           }
-          else if (!begin && !twiddle){
-            //count = 0;
+          /*
+          else if (!begin && !twiddle && dp[0] + dp[1] + dp[2] > tol){
             twiddle = true;
           }
-
+          */
           if (twiddle){
             if (flag_1 && count == 0){
               p[i] += dp[i];
@@ -99,7 +105,6 @@ int main() {
               pid.i_error = 0.0;
               pid.d_error = 0.0;
               std::cout<< "first p[i] = " << p[i] << " i = " << i << std::endl;
-              std::cout << "errors: " << cte << "," << pid.p_error << "," << pid.i_error << "," << pid.d_error << std::endl;
               if (i == 0){
                 pid.Kp = p[i];
               }
@@ -118,7 +123,6 @@ int main() {
               pid.i_error = 0.0;
               pid.d_error = 0.0;
               std::cout << "second p[i] = " << p[i] << " i = " << i << std::endl;
-              std::cout << "errors: " << cte << "," << pid.p_error << "," << pid.i_error << "," << pid.d_error << std::endl;
               if (i == 0){
                 pid.Kp = p[i];
               }
@@ -131,10 +135,13 @@ int main() {
               flag_2 = false;
             }
             if (count < n){
-              total_error += cte * cte;
+              if (count > 50){
+                // add up errors after 50 moves
+                total_error += cte * cte;
+              }
               count += 1;
               if (count == n){
-                double error = total_error / n;
+                double error = total_error / (n-50);
                 total_error = 0.0;
                 if (error < best_error){
                   best_error = error;
@@ -181,24 +188,35 @@ int main() {
           }
 
           double sumdp = dp[0] + dp[1] + dp[2];
-          if (sumdp < 0.001){
+          if (sumdp < tol){
             twiddle = false;
             std::cout << "best parameter: " << p[0] << "," << p[1] << "," << p[2] << std::endl;
           }
 
           pid.UpdateError(cte);
           steer_value = pid.TotalError();
+          throttle.UpdateError(cte);
+          throttle_value = throttle.TotalError();
+
           if (count == 1){
             std::cout << "parameter: " << pid.Kp << "," << pid.Ki << "," << pid.Kd << std::endl;
-            std::cout << "errors: " << cte << "," << pid.p_error << "," << pid.i_error << "," << pid.d_error << std::endl;
+            std::cout << "dp:" << sumdp << std::endl;
           }
 
           // DEBUG
-          std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << "count:" << count << std::endl;
-
+          std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << " p: " << pid.p_error << " i: " << pid.i_error <<" d:" << pid.d_error << " count: " << count <<std::endl;
+          // std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << " throttle: " << throttle_value << std::endl;
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          msgJson["throttle"] = 0.3;
+          // msgJson["throttle"] = throttle_value;
+
+          if (fabs(pid.d_error) > 1.0){
+            msgJson["throttle"] = -0.1;
+          }
+          else{
+            msgJson["throttle"] = 0.35;
+          }
+
           if (count == n){
             string msg = "42[\"reset\",{}]";
             std::cout << msg << std::endl;
