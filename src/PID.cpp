@@ -24,12 +24,8 @@ void PID::UpdateError(double cte) {
   /**
    * TODO: Update PID errors based on cte.
    */
-  if (p_error == 0.0){
-    d_error = 0.0;
-  }
-  else{
-    d_error = cte - p_error;
-  }
+
+  d_error = cte - p_error;
   p_error = cte;
   i_error += cte;
 }
