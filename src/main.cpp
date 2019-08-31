@@ -39,22 +39,22 @@ int main() {
   /**
    * TODO: Initialize the pid variable.
    */
-  pid.Init(0.1, 0.00032, 0.49);
-  vector<double> p{0.1, 0.00053, 0.7};
-  vector<double> dp{0.01, 0.0001, 0.1};
-  throttle.Init(-1.0, -0.01, 0.0);
+  //pid.Init(0.1, 0.0, 0.5);
+  pid.Init(0.1, 0.00026662, 0.4913);
+  vector<double> p{0.1, 0.0003, 0.5};
+  vector<double> dp{0.05, 0.0001, 0.3};
   int i = 0;
   bool flag_1 = true;    // if flag_1 = true, p[i] += dp[i]
-  bool flag_2 = false;   // if flag_2 = true, p[i] -= dp[i]
+  bool flag_2 = false;   // if flag_2 = true, p[i] -= 2 * dp[i]
   bool flag_3 = false;   // if flag_3 = true, means p[i] += dp[i], but error > best_error, so need to set flag_2 = true
   bool twiddle = false;  // twiddle is only false at the beginning or the sumdp < 0.0001
-  bool begin = false;     // begin is only true at the beginning
+  bool begin = false;    // set begin to true when using twiddle, begin is only true at the beginning.
   double total_error = 0.0;
   double best_error;
   int count = 0;   // count how many moves
-  int n = 1000;     // every iteration will run 500 times
+  int n = 1000;     // every iteration will run 1000 times
 
-  h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n, &throttle]
+  h.onMessage([&pid, &i, &twiddle, &flag_1, &flag_2, &flag_3, &best_error, &total_error, &count, &begin, &p, &dp, &n]
              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -73,7 +73,6 @@ int main() {
           double speed = std::stod(j[1]["speed"].get<string>());
           double angle = std::stod(j[1]["steering_angle"].get<string>());
           double steer_value;
-          double throttle_value;
           double tol = 0.01;
           /**
            * TODO: Calculate steering value here, remember the steering value is [-1, 1].
@@ -93,11 +92,11 @@ int main() {
               begin = false;
             }
           }
-          /*
-          else if (!begin && !twiddle && dp[0] + dp[1] + dp[2] > tol){
-            twiddle = true;
-          }
-          */
+          // uncomment when using twiddle
+          //else if (!begin && !twiddle && dp[0] + dp[1] + dp[2] > tol){
+          //  twiddle = true;
+          //}
+
           if (twiddle){
             if (flag_1 && count == 0){
               p[i] += dp[i];
@@ -142,6 +141,7 @@ int main() {
               count += 1;
               if (count == n){
                 double error = total_error / (n-50);
+                std::cout << "best_error = " << best_error << " error = " << error << std::endl;
                 total_error = 0.0;
                 if (error < best_error){
                   best_error = error;
@@ -193,10 +193,9 @@ int main() {
             std::cout << "best parameter: " << p[0] << "," << p[1] << "," << p[2] << std::endl;
           }
 
+          // Update CTE
           pid.UpdateError(cte);
           steer_value = pid.TotalError();
-          throttle.UpdateError(cte);
-          throttle_value = throttle.TotalError();
 
           if (count == 1){
             std::cout << "parameter: " << pid.Kp << "," << pid.Ki << "," << pid.Kd << std::endl;
@@ -204,17 +203,28 @@ int main() {
           }
 
           // DEBUG
-          std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << " p: " << pid.p_error << " i: " << pid.i_error <<" d:" << pid.d_error << " count: " << count <<std::endl;
-          // std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << " throttle: " << throttle_value << std::endl;
+          //total_error += cte * cte;
+          //count += 1;
+          std::cout << "CTE: " << cte <<" Steering Value: " << steer_value << std::endl;
+
           json msgJson;
           msgJson["steering_angle"] = steer_value;
-          // msgJson["throttle"] = throttle_value;
+          //msgJson["throttle"] = 0.3;
 
-          if (fabs(pid.d_error) > 1.0){
-            msgJson["throttle"] = -0.1;
+          // Control the throttle
+          if (fabs(cte) > 1.0 && speed > 20){
+            msgJson["throttle"] = 0;
+          }
+          else if (fabs(pid.d_error) > 0.5 && speed > 25){
+            msgJson["throttle"] = 0;
           }
           else{
-            msgJson["throttle"] = 0.35;
+            if (fabs(cte) > 1.0){
+              msgJson["throttle"] = 0.2;
+            }
+            else{
+              msgJson["throttle"] = 0.3;
+            }
           }
 
           if (count == n){
