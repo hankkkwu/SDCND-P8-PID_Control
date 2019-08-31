@@ -57,7 +57,9 @@ The problem with the P component is that it will always overshot and never quite
 D stands for differential, it will help us avoid the overshoot problem by taking the temporal derivative of the cross-track error(CTE) using the following formula:
 
 ` diff_cte = cte - pre_cte`
+
 ` pre_cte = cte`
+
 ` steering = - tau_d * diff_cte`
 
 This means when the car has turned enough to reduce the CTE, it will not just go on trying to reach the target trajectory but will notice that it has already reduced the error, so it makes the car approach its target trajectory gracefully. Here is a [video](https://youtu.be/WFUQ1wf9by4) that set Kp to 0.1, Kd to 0.5, and Ki set to 0.
@@ -68,6 +70,7 @@ This means when the car has turned enough to reduce the CTE, it will not just go
 I stands for integral, since PD controller can not solve the systematic bias problem, we can solve this by adding up the cross-track error(CTE) over time. The purpose of I component is to compensate for biases. I component will use the following formula:
 
 ` int_cte += cte`
+
 ` steering = - tau_i * int_cte`
 
 
