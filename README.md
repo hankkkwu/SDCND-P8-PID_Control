@@ -49,7 +49,7 @@ P stands for proportional, it controls the steering proportional to the cross-tr
 
 `steering = - tau_p * cte`
 
-The problem with the P component is that it will always overshot and never quite attain the correct trajectory, no matter how small the tau_p is. The car's path will oscillate more quickly when tau_p is larger. Here is a [video]() that set Kp to 0.1 whereas Ki and Kd set to 0 :
+The problem with the P component is that it will always overshot and never quite attain the correct trajectory, no matter how small the tau_p is. The car's path will oscillate more quickly when tau_p is larger. Here is a [video](https://github.com/hankkkwu/SDCND-P8-PID_Control/blob/master/P_controll.flv) that set Kp to 0.1 whereas Ki and Kd set to 0.
 
 
 
@@ -57,11 +57,13 @@ The problem with the P component is that it will always overshot and never quite
 D stands for differential, it will help us avoid the overshoot problem by taking the temporal derivative of the cross-track error(CTE) using the following formula:
 
 ` diff_cte = cte - pre_cte
+
   pre_cte = cte
+
   steering = - tau_d * diff_cte
 `
 
-This means when the car has turned enough to reduce the CTE, it will not just go on trying to reach the target trajectory but will notice that it has already reduced the error, so it makes the car approach its target trajectory gracefully. Here is a [video](https://youtu.be/WFUQ1wf9by4) that set Kp to 0.1, Kd to 0.5, and Ki set to 0:
+This means when the car has turned enough to reduce the CTE, it will not just go on trying to reach the target trajectory but will notice that it has already reduced the error, so it makes the car approach its target trajectory gracefully. Here is a [video](https://youtu.be/WFUQ1wf9by4) that set Kp to 0.1, Kd to 0.5, and Ki set to 0.
 
 
 
@@ -69,6 +71,7 @@ This means when the car has turned enough to reduce the CTE, it will not just go
 I stands for integral, since PD controller can not solve the systematic bias problem, we can solve this by adding up the cross-track error(CTE) over time. The purpose of I component is to compensate for biases. I component will use the following formula:
 
 ` int_cte += cte
+
   steering = - tau_i * int_cte
 `
 
